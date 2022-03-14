@@ -16,6 +16,7 @@ import socket
 import time
 import torch
 
+import numpy as np
 import thumt.data as data
 import torch.distributed as dist
 import thumt.models as models
@@ -77,6 +78,8 @@ def default_params():
         min_length=1,
         max_length=256,
         buffer_size=10000,
+        # Prefix
+        prefix_length=64,
         # Initialization
         initializer_gain=1.0,
         initializer="uniform_unit_scaling",
@@ -369,13 +372,25 @@ def main(args):
         torch.cuda.set_device(params.device_list[args.local_rank])
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
+    # prefix tuning
+    if args.model == 'prefix_transformer':
+        print("Loading Transformer model...", flush=True)
+        transformer_model_cls = models.get_model('transformer')
+        transformer_model = transformer_model_cls(params).cuda()
+        print("Finished.", flush=True)
+
+        if args.half:
+            transformer_model = transformer_model.half()
+
+        model = model_cls(transformer_model, params).cuda()
+    else:
+        model = model_cls(params).cuda()
+
     # Export parameters
     if dist.get_rank() == 0:
         export_params(params.output, "params.json", params)
         export_params(params.output, "%s.json" % params.model,
                       collect_params(params, model_cls.default_params()))
-
-    model = model_cls(params).cuda()
 
     if args.half:
         model = model.half()
@@ -415,8 +430,9 @@ def main(args):
 
     if args.checkpoint is not None:
         # Load pre-trained models
-        state = torch.load(args.checkpoint, map_location="cpu")
-        model.load_state_dict(state["model"])
+        if args.model != 'prefix_transformer':
+            state = torch.load(args.checkpoint, map_location="cpu")
+            model.load_state_dict(state["model"])
         step = params.initial_step
         epoch = 0
         broadcast(model)
@@ -454,6 +470,7 @@ def main(args):
             grads_and_vars = exclude_variables(
                 trainable_flags,
                 zip(gradients, list(model.named_parameters())))
+            # import ipdb; ipdb.set_trace()
             optimizer.apply_gradients(grads_and_vars)
 
             t = time.time() - t

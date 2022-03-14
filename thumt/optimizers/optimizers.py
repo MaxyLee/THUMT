@@ -22,15 +22,24 @@ def _save_summary(grads_and_vars):
         if grad is None:
             continue
 
-        _, var = var
+        name, var = var
         grad_norm = grad.data.norm()
         total_norm += grad_norm ** 2
-        summary.histogram(var.tensor_name, var,
+        try:
+            summary.histogram(name, var,
                           utils.get_global_step())
-        summary.scalar("norm/" + var.tensor_name, var.norm(),
-                       utils.get_global_step())
-        summary.scalar("grad_norm/" + var.tensor_name, grad_norm,
-                       utils.get_global_step())
+            summary.scalar("norm/" + name, var.norm(),
+                        utils.get_global_step())
+            summary.scalar("grad_norm/" + name, grad_norm,
+                        utils.get_global_step())
+            # summary.histogram(var.tensor_name, var,
+            #               utils.get_global_step())
+            # summary.scalar("norm/" + var.tensor_name, var.norm(),
+            #             utils.get_global_step())
+            # summary.scalar("grad_norm/" + var.tensor_name, grad_norm,
+            #             utils.get_global_step())
+        except:
+            import ipdb; ipdb.set_trace()
 
     total_norm = total_norm ** 0.5
     summary.scalar("grad_norm", total_norm, utils.get_global_step())

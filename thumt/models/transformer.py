@@ -26,17 +26,17 @@ class AttentionSubLayer(modules.Module):
                 params.hidden_size, params.num_heads, params.attention_dropout)
             self.layer_norm = modules.LayerNorm(params.hidden_size)
 
-    def forward(self, x, bias, memory=None, state=None):
+    def forward(self, x, bias, memory=None, state=None, layer_past=None):
         if self.normalization == "before":
             y = self.layer_norm(x)
         else:
             y = x
 
         if self.training or state is None:
-            y = self.attention(y, bias, memory, None)
+            y = self.attention(y, bias, memory, kv=None, layer_past=layer_past)
         else:
             kv = [state["k"], state["v"]]
-            y, k, v = self.attention(y, bias, memory, kv)
+            y, k, v = self.attention(y, bias, memory, kv, layer_past)
             state["k"], state["v"] = k, v
 
         y = nn.functional.dropout(y, self.dropout, self.training)
@@ -85,8 +85,8 @@ class TransformerEncoderLayer(modules.Module):
             self.self_attention = AttentionSubLayer(params)
             self.feed_forward = FFNSubLayer(params)
 
-    def forward(self, x, bias):
-        x = self.self_attention(x, bias)
+    def forward(self, x, bias, layer_past=None):
+        x = self.self_attention(x, bias, layer_past=layer_past)
         x = self.feed_forward(x)
         return x
 
@@ -103,8 +103,8 @@ class TransformerDecoderLayer(modules.Module):
                                                     name="encdec_attention")
             self.feed_forward = FFNSubLayer(params)
 
-    def __call__(self, x, attn_bias, encdec_bias, memory, state=None):
-        x = self.self_attention(x, attn_bias, state=state)
+    def __call__(self, x, attn_bias, encdec_bias, memory, state=None, layer_past=None):
+        x = self.self_attention(x, attn_bias, state=state, layer_past=layer_past)
         x = self.encdec_attention(x, encdec_bias, memory)
         x = self.feed_forward(x)
         return x
@@ -126,9 +126,9 @@ class TransformerEncoder(modules.Module):
             else:
                 self.layer_norm = None
 
-    def forward(self, x, bias):
-        for layer in self.layers:
-            x = layer(x, bias)
+    def forward(self, x, bias, past_key_values):
+        for layer, layer_past in zip(self.layers, past_key_values):
+            x = layer(x, bias, layer_past)
 
         if self.normalization == "before":
             x = self.layer_norm(x)
@@ -153,13 +153,13 @@ class TransformerDecoder(modules.Module):
             else:
                 self.layer_norm = None
 
-    def forward(self, x, attn_bias, encdec_bias, memory, state=None):
-        for i, layer in enumerate(self.layers):
+    def forward(self, x, attn_bias, encdec_bias, memory, past_key_values, state=None):
+        for i, (layer, layer_past) in enumerate(zip(self.layers, past_key_values)):
             if state is not None:
                 x = layer(x, attn_bias, encdec_bias, memory,
-                          state["decoder"]["layer_%d" % i])
+                          state=state["decoder"]["layer_%d" % i], layer_past=layer_past)
             else:
-                x = layer(x, attn_bias, encdec_bias, memory, None)
+                x = layer(x, attn_bias, encdec_bias, memory, None, layer_past)
 
         if self.normalization == "before":
             x = self.layer_norm(x)
@@ -245,30 +245,57 @@ class Transformer(modules.Module):
             nn.init.normal_(self.softmax_weights, mean=0.0,
                             std=self.params.hidden_size ** -0.5)
 
-    def encode(self, features, state):
+    def encode(self, features, state, past_key_values=None):
         src_seq = features["source"]
         src_mask = features["source_mask"]
+
+        if past_key_values is None:
+            past_length = 0
+            past_key_values = tuple([None] * self.params.num_encoder_layers)
+        else:
+            batch_size = features["source_mask"].shape[0]
+            past_length = past_key_values[0][0].size(-2)
+
+            prefix_mask = torch.ones(batch_size, past_length)
+            src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
+
         enc_attn_bias = self.masking_bias(src_mask)
 
         inputs = torch.nn.functional.embedding(src_seq, self.src_embedding)
         inputs = inputs * (self.hidden_size ** 0.5)
         inputs = inputs + self.bias
-        inputs = nn.functional.dropout(self.encoding(inputs), self.dropout,
+        inputs = nn.functional.dropout(self.encoding(inputs, past_length), self.dropout,
                                        self.training)
 
         enc_attn_bias = enc_attn_bias.to(inputs)
-        encoder_output = self.encoder(inputs, enc_attn_bias)
+        encoder_output = self.encoder(inputs, enc_attn_bias, past_key_values)
 
         state["encoder_output"] = encoder_output
-        state["enc_attn_bias"] = enc_attn_bias
+        state["enc_attn_bias"] = enc_attn_bias[:, :, :, past_length:]
 
         return state
 
-    def decode(self, features, state, mode="infer"):
+    def decode(self, features, state, mode="infer", past_key_values=None):
         tgt_seq = features["target"]
+        tgt_length = tgt_seq.shape[1]
 
         enc_attn_bias = state["enc_attn_bias"]
-        dec_attn_bias = self.causal_bias(tgt_seq.shape[1])
+        dec_attn_bias = self.causal_bias(tgt_length)
+
+        if past_key_values is None:
+            past_length = 0
+            past_key_values = tuple([None] * self.params.num_decoder_layers)
+
+        else:
+            past_length = past_key_values[0][0].size(-2)
+
+            prefix_attn_bias = torch.zeros(tgt_length, past_length)
+            prefix_attn_bias = prefix_attn_bias[None, None, :, :]
+            dec_attn_bias = torch.cat([prefix_attn_bias, dec_attn_bias], dim=-1)
+
+            if mode == 'infer':
+                past_key_values = tuple([None] * self.params.num_decoder_layers)
+        
 
         targets = torch.nn.functional.embedding(tgt_seq, self.tgt_embedding)
         targets = targets * (self.hidden_size ** 0.5)
@@ -276,7 +303,7 @@ class Transformer(modules.Module):
         decoder_input = torch.cat(
             [targets.new_zeros([targets.shape[0], 1, targets.shape[-1]]),
              targets[:, 1:, :]], dim=1)
-        decoder_input = nn.functional.dropout(self.encoding(decoder_input),
+        decoder_input = nn.functional.dropout(self.encoding(decoder_input, past_length),
                                               self.dropout, self.training)
 
         encoder_output = state["encoder_output"]
@@ -285,9 +312,10 @@ class Transformer(modules.Module):
         if mode == "infer":
             decoder_input = decoder_input[:, -1:, :]
             dec_attn_bias = dec_attn_bias[:, :, -1:, :]
+            # import ipdb; ipdb.set_trace()
 
         decoder_output = self.decoder(decoder_input, dec_attn_bias,
-                                      enc_attn_bias, encoder_output, state)
+                                      enc_attn_bias, encoder_output, past_key_values, state)
 
         decoder_output = torch.reshape(decoder_output, [-1, self.hidden_size])
         decoder_output = torch.transpose(decoder_output, -1, -2)

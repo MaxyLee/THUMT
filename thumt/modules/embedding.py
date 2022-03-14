@@ -14,7 +14,7 @@ class PositionalEmbedding(torch.nn.Module):
     def __init__(self):
         super(PositionalEmbedding, self).__init__()
 
-    def forward(self, inputs):
+    def forward(self, inputs, past_length=0):
         if inputs.dim() != 3:
             raise ValueError("The rank of input must be 3.")
 
@@ -22,8 +22,8 @@ class PositionalEmbedding(torch.nn.Module):
         channels = inputs.shape[2]
         half_dim = channels // 2
 
-        positions = torch.arange(length, dtype=inputs.dtype,
-                                 device=inputs.device)
+        positions = torch.arange(past_length, length + past_length, 
+                                 dtype=inputs.dtype, device=inputs.device)
         dimensions = torch.arange(half_dim, dtype=inputs.dtype,
                                   device=inputs.device)
 

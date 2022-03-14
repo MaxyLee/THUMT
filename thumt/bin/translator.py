@@ -187,10 +187,24 @@ def main(args):
         model_list = []
 
         for i in range(len(args.models)):
-            if args.cpu:
-                model = model_cls_list[i](params_list[i])
+            if args.models[i] == 'prefix_transformer':
+                print("Loading Transformer model...", flush=True)
+                transformer_model_cls = models.get_model('transformer')
+                if args.cpu:
+                    transformer_model = transformer_model_cls(params)
+                else:
+                    transformer_model = transformer_model_cls(params).cuda()
+                print("Finished.", flush=True)
+
+                if args.half:
+                    transformer_model = transformer_model.half()
+
+                model = model_cls_list[i](transformer_model, params_list[i]).cuda()
             else:
-                model = model_cls_list[i](params_list[i]).cuda()
+                if args.cpu:
+                    model = model_cls_list[i](params_list[i])
+                else:
+                    model = model_cls_list[i](params_list[i]).cuda()
 
             if args.half:
                 model = model.half()
