@@ -19,7 +19,7 @@ DATA_DIR=$ROOT/data/multi30k-dataset/data/task1/raw
 #   --model transformer \
 #   --parameters=batch_size=4096,device_list=[0,1,2,3],update_cycle=2,eval_steps=20 \
 #   --hparam_set base
-  
+
 # prefix tuning
 CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py \
   --input $DATA_DIR/train.32k.en.shuf $DATA_DIR/train.32k.de.shuf \
@@ -29,5 +29,5 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py \
   --references $DATA_DIR/val.de \
   --checkpoint $CKPT \
   --model prefix_transformer \
-  --parameters=batch_size=4096,device_list=[0,1,2,3],update_cycle=2,eval_steps=20 \
+  --parameters=prefix_length=64,learning_rate=7e-4,batch_size=4096,device_list=[0,1,2,3],update_cycle=2,eval_steps=20 \
   --hparam_set base

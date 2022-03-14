@@ -254,7 +254,7 @@ class Transformer(modules.Module):
             past_key_values = tuple([None] * self.params.num_encoder_layers)
         else:
             batch_size = features["source_mask"].shape[0]
-            past_length = past_key_values[0][0].size(-2)
+            past_length = self.params.prefix_length
 
             prefix_mask = torch.ones(batch_size, past_length)
             src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
@@ -287,16 +287,12 @@ class Transformer(modules.Module):
             past_key_values = tuple([None] * self.params.num_decoder_layers)
 
         else:
-            past_length = past_key_values[0][0].size(-2)
+            past_length = self.params.prefix_length
 
             prefix_attn_bias = torch.zeros(tgt_length, past_length)
             prefix_attn_bias = prefix_attn_bias[None, None, :, :]
             dec_attn_bias = torch.cat([prefix_attn_bias, dec_attn_bias], dim=-1)
-
-            if mode == 'infer':
-                past_key_values = tuple([None] * self.params.num_decoder_layers)
         
-
         targets = torch.nn.functional.embedding(tgt_seq, self.tgt_embedding)
         targets = targets * (self.hidden_size ** 0.5)
 
@@ -312,7 +308,6 @@ class Transformer(modules.Module):
         if mode == "infer":
             decoder_input = decoder_input[:, -1:, :]
             dec_attn_bias = dec_attn_bias[:, :, -1:, :]
-            # import ipdb; ipdb.set_trace()
 
         decoder_output = self.decoder(decoder_input, dec_attn_bias,
                                       enc_attn_bias, encoder_output, past_key_values, state)

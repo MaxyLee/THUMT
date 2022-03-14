@@ -36,6 +36,8 @@ def parse_args():
                         help="Path to trained checkpoints.")
     parser.add_argument("--vocabulary", type=str, nargs=2, required=True,
                         help="Path to source and target vocabulary.")
+    parser.add_argument("--prefix", type=str, default="",
+                        help="Path to prefix checkpoint")
 
     # model and configuration
     parser.add_argument("--models", type=str, required=True, nargs="+",
@@ -194,25 +196,32 @@ def main(args):
                     transformer_model = transformer_model_cls(params)
                 else:
                     transformer_model = transformer_model_cls(params).cuda()
+                transformer_model.load_state_dict(
+                    torch.load(utils.latest_checkpoint(args.checkpoints[i]),
+                               map_location="cpu")["model"])
+
                 print("Finished.", flush=True)
 
                 if args.half:
                     transformer_model = transformer_model.half()
 
                 model = model_cls_list[i](transformer_model, params_list[i]).cuda()
+                model.load_prefix(args.prefix)
             else:
                 if args.cpu:
                     model = model_cls_list[i](params_list[i])
                 else:
                     model = model_cls_list[i](params_list[i]).cuda()
 
+                model.load_state_dict(
+                    torch.load(utils.latest_checkpoint(args.checkpoints[i]),
+                               map_location="cpu")["model"])
+
             if args.half:
                 model = model.half()
 
             model.eval()
-            model.load_state_dict(
-                torch.load(utils.latest_checkpoint(args.checkpoints[i]),
-                           map_location="cpu")["model"])
+            
 
             model_list.append(model)
 

@@ -97,6 +97,10 @@ class PrefixTransformer(modules.Module):
         self.transformer_model.train(mode)
         return super().train(mode)
 
+    def load_prefix(self, path):
+        state = torch.load(path, map_location="cpu")
+        self.load_state_dict(state["model"])
+
     def get_prefix(self, layer, batch_size, split_heads=True):
         past_key_values = []
 
@@ -144,8 +148,7 @@ class PrefixTransformer(modules.Module):
     def decode(self, features, state, mode="infer"):
         batch_size = features['source'].shape[0]
         if mode == 'infer':
-            # past_key_values = None
-            past_key_values = self.get_prefix('decode', batch_size, split_heads=False)
+            past_key_values = tuple([None] * self.params.num_decoder_layers)
         else:
             past_key_values = self.get_prefix('decode', batch_size)
 

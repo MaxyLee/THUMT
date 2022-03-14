@@ -433,6 +433,9 @@ def main(args):
         if args.model != 'prefix_transformer':
             state = torch.load(args.checkpoint, map_location="cpu")
             model.load_state_dict(state["model"])
+        else:
+            state = torch.load(args.checkpoint, map_location="cpu")
+            transformer_model.load_state_dict(state["model"])
         step = params.initial_step
         epoch = 0
         broadcast(model)
@@ -470,7 +473,7 @@ def main(args):
             grads_and_vars = exclude_variables(
                 trainable_flags,
                 zip(gradients, list(model.named_parameters())))
-            # import ipdb; ipdb.set_trace()
+
             optimizer.apply_gradients(grads_and_vars)
 
             t = time.time() - t

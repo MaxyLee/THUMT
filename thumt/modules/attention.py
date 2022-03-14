@@ -154,12 +154,12 @@ class MultiHeadAttention(MultiHeadAttentionBase):
         kh = self.split_heads(k, self.num_heads)
         vh = self.split_heads(v, self.num_heads)
 
-        # For Prefix Tuning
+        # for prefix-tuning
         if layer_past is not None:
             past_key, past_value = layer_past
             kh = torch.cat((past_key, kh), dim=-2)
             vh = torch.cat((past_value, vh), dim=-2)
-        # import ipdb; ipdb.set_trace()
+
         # scale query
         qh = qh * (self.hidden_size // self.num_heads) ** -0.5
 
