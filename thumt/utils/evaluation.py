@@ -134,6 +134,7 @@ def _evaluate_model(model, sorted_key, dataset, references, params):
                 batch_size = features["source"].shape[0]
             except:
                 features = {
+                    "img_feature": torch.zeros([1, 512]).float(),
                     "source": torch.ones([1, 1]).long(),
                     "source_mask": torch.ones([1, 1]).float()
                 }
@@ -183,7 +184,6 @@ def _evaluate_model(model, sorted_key, dataset, references, params):
 
     if dist.get_rank() == 0:
         restored_results = []
-
         for idx in range(len(results)):
             restored_results.append(results[sorted_key[idx]])
 

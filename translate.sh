@@ -1,20 +1,22 @@
 ROOT=/data1/private/mxy/projects/mmt
 
+PRETRAIN_DATA=wmt18+cc-en-de
+
 EXP=$ROOT/exp/THUMT
 # CKPT=$EXP/finetune/cc-en-de/eval
-CKPT=$EXP/pretrain/cc-en-de/eval
-PREFIX_CKPT=$EXP/prefix-tuning/cc-en-de/eval/model-142.pt
+CKPT=$EXP/pretrain/$PRETRAIN_DATA/eval
+PREFIX_CKPT=$EXP/prefix-tuning/$PRETRAIN_DATA/eval/model-108.pt
 
 VOCAB_DIR=$ROOT/data/wmt18/de-en
 DATA_DIR=$ROOT/data/multi30k-dataset/data/task1/raw
 
-TESTNAME=test_2016_flickr
+TESTNAME=test_2017_mscoco
 INPUT=$DATA_DIR/$TESTNAME.32k.en
 OUTPUT=$DATA_DIR/$TESTNAME.trans
 # INPUT=$VOCAB_DIR/$TESTNAME.tc.32k.en
 # OUTPUT=$VOCAB_DIR/$TESTNAME.trans
 
-CUDA_VISIBLE_DEVICES=4 python translate.py \
+CUDA_VISIBLE_DEVICES=7 python translate.py \
   --models prefix_transformer \
   --input $INPUT \
   --output $OUTPUT \

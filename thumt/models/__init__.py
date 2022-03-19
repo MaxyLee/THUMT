@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import thumt.models.transformer
 import thumt.models.prefix
+import thumt.models.visual_prefix
 
 
 def get_model(name):
@@ -16,5 +17,7 @@ def get_model(name):
         return thumt.models.transformer.Transformer
     elif name == "prefix_transformer":
         return thumt.models.prefix.PrefixTransformer
+    elif name == "visual_prefix_transformer":
+        return thumt.models.visual_prefix.VisualPrefixTransformer
     else:
         raise LookupError("Unknown model %s" % name)

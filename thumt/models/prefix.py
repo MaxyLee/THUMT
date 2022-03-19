@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import thumt.modules as modules
 
-from .transformer import AttentionSubLayer, Transformer
+from .transformer import Transformer
 
 def _split_heads(tensor, num_heads, attn_head_size):
     """
@@ -82,8 +82,7 @@ class PrefixTransformer(modules.Module):
 
         self.prefix_net = PrefixModel(model, params.prefix_length, params.hidden_size)
 
-        self.criterion = modules.SmoothedCrossEntropyLoss(
-            params.label_smoothing)
+        self.criterion = modules.SmoothedCrossEntropyLoss(params.label_smoothing)
 
     @property
     def transformer_model(self):

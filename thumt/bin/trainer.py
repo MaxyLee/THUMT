@@ -24,6 +24,9 @@ import thumt.optimizers as optimizers
 import thumt.utils as utils
 import thumt.utils.summary as summary
 
+from thumt.data import M30kDataset, get_infer_dataset
+from torch.utils.data import DataLoader
+
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(
@@ -34,6 +37,8 @@ def parse_args(args=None):
     # input files
     parser.add_argument("--input", type=str, nargs=2,
                         help="Path to source and target corpus.")
+    parser.add_argument("--img_input", type=str, nargs=2, default=None,
+                        help="Path to image filepath and features")
     parser.add_argument("--output", type=str, default="train",
                         help="Path to load/store checkpoints.")
     parser.add_argument("--vocabulary", type=str, nargs=2,
@@ -180,6 +185,7 @@ def merge_params(params1, params2):
 def override_params(params, args):
     params.model = args.model or params.model
     params.input = args.input or params.input
+    params.img_input = args.img_input
     params.output = args.output or params.output
     params.vocab = args.vocabulary or params.vocab
     params.validation = args.validation or params.validation
@@ -373,7 +379,7 @@ def main(args):
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
     # prefix tuning
-    if args.model == 'prefix_transformer':
+    if 'prefix_transformer' in args.model:
         print("Loading Transformer model...", flush=True)
         transformer_model_cls = models.get_model('transformer')
         transformer_model = transformer_model_cls(params).cuda()
@@ -414,11 +420,23 @@ def main(args):
     trainable_flags = print_variables(model, params.pattern,
                                       dist.get_rank() == 0)
 
-    dataset = data.MTPipeline.get_train_dataset(params.input, params)
+    if args.model == 'visual_prefix_transformer':
+        train_dataset = M30kDataset(params.input, params.img_input, params.vocabulary, params.device,
+                              params.max_length, params.bos, params.eos, params.pad, params.unk, 'train')
+        train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
+        # import ipdb; ipdb.set_trace()
+    else:
+        dataset = data.MTPipeline.get_train_dataset(params.input, params)
 
     if params.validation:
-        sorted_key, eval_dataset = data.MTPipeline.get_infer_dataset(
-            params.validation, params)
+        if args.model == 'visual_prefix_transformer':
+            sorted_key, eval_dataset = get_infer_dataset(params.validation, params)
+            eval_dataloader = DataLoader(eval_dataset, batch_size=params.decode_batch_size)
+            # Still no choice
+            eval_dataset = eval_dataloader
+        else:
+            sorted_key, eval_dataset = data.MTPipeline.get_infer_dataset(
+                params.validation, params)
         references = load_references(params.references)
     else:
         sorted_key = None
@@ -430,7 +448,7 @@ def main(args):
 
     if args.checkpoint is not None:
         # Load pre-trained models
-        if args.model != 'prefix_transformer':
+        if 'prefix_transformer' not in args.model:
             state = torch.load(args.checkpoint, map_location="cpu")
             model.load_state_dict(state["model"])
         else:
@@ -460,6 +478,10 @@ def main(args):
     counter = 0
 
     while True:
+        # I have no choice but to write this s**t code
+        if args.model == 'visual_prefix_transformer':
+            dataset = train_dataloader
+
         for features in dataset:
             if counter % params.update_cycle == 0:
                 step += 1
@@ -482,12 +504,12 @@ def main(args):
             summary.scalar("global_step/sec", t, step)
 
             print("epoch = %d, step = %d, loss = %.3f (%.3f sec)" %
-                  (epoch + 1, step, float(loss), t))
+                    (epoch + 1, step, float(loss), t))
 
             if counter % params.update_cycle == 0:
                 if step >= params.train_steps:
                     utils.evaluate(model, sorted_key, eval_dataset,
-                                   params.output, references, params)
+                                    params.output, references, params)
                     save_checkpoint(step, epoch, model, optimizer, params)
 
                     if dist.get_rank() == 0:
@@ -497,13 +519,12 @@ def main(args):
 
                 if step % params.eval_steps == 0:
                     utils.evaluate(model, sorted_key, eval_dataset,
-                                   params.output, references, params)
+                                    params.output, references, params)
 
                 if step % params.save_checkpoint_steps == 0:
                     save_checkpoint(step, epoch, model, optimizer, params)
 
         epoch += 1
-
 
 # Wrap main function
 def process_fn(rank, args):

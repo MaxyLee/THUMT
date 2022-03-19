@@ -245,28 +245,35 @@ class Transformer(modules.Module):
             nn.init.normal_(self.softmax_weights, mean=0.0,
                             std=self.params.hidden_size ** -0.5)
 
-    def encode(self, features, state, past_key_values=None):
+    def encode(self, features, state, past_key_values=None, prefix=None):
         src_seq = features["source"]
         src_mask = features["source_mask"]
+        batch_size = src_mask.shape[0]
 
         if past_key_values is None:
             past_length = 0
             past_key_values = tuple([None] * self.params.num_encoder_layers)
         else:
-            batch_size = features["source_mask"].shape[0]
             past_length = self.params.prefix_length
 
             prefix_mask = torch.ones(batch_size, past_length)
             src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
 
-        enc_attn_bias = self.masking_bias(src_mask)
-
         inputs = torch.nn.functional.embedding(src_seq, self.src_embedding)
         inputs = inputs * (self.hidden_size ** 0.5)
         inputs = inputs + self.bias
+
+        if prefix is not None:
+            prefix_length = prefix.shape[1]
+            inputs = torch.cat([prefix, inputs], dim=1)
+
+            prefix_mask = torch.ones(batch_size, prefix_length)
+            src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
+
         inputs = nn.functional.dropout(self.encoding(inputs, past_length), self.dropout,
                                        self.training)
 
+        enc_attn_bias = self.masking_bias(src_mask)
         enc_attn_bias = enc_attn_bias.to(inputs)
         encoder_output = self.encoder(inputs, enc_attn_bias, past_key_values)
 
