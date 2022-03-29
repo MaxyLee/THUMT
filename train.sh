@@ -34,9 +34,22 @@ DATA_DIR=$ROOT/data/multi30k-dataset/data/task1/raw
 #   --parameters=batch_size=4096,device_list=[0,1,2,3],update_cycle=2,eval_steps=20 \
 #   --hparam_set big
 
+MASKC_DATA_DIR=$ROOT/code/fairseq_mmt/data/multi30k-en-de.maskc
+## on masked data
+CUDA_VISIBLE_DEVICES=4,5,6,7 python train.py \
+  --input $DATA_DIR/train.32k.en.shuf $DATA_DIR/train.32k.de.shuf \
+  --output $EXP/maskc/finetune/$PRETRAIN_DATA \
+  --vocabulary $VOCAB_DIR/vocab.32k.en.txt $VOCAB_DIR/vocab.32k.de.txt \
+  --validation $DATA_DIR/val.32k.en \
+  --references $DATA_DIR/val.de \
+  --checkpoint $CKPT \
+  --model transformer \
+  --parameters=batch_size=4096,device_list=[0,1,2,3],update_cycle=2,eval_steps=20 \
+  --hparam_set big
+
 DATA_DIR=$ROOT/data/multi30k-dataset/data/task1/raw
 # prefix tuning
-# CUDA_VISIBLE_DEVICES=4,5,6,7 python train.py \
+# CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py \
 #   --input $DATA_DIR/train.32k.en.shuf $DATA_DIR/train.32k.de.shuf \
 #   --output $EXP/prefix-tuning/$PRETRAIN_DATA \
 #   --vocabulary $VOCAB_DIR/vocab.32k.en.txt $VOCAB_DIR/vocab.32k.de.txt \
@@ -44,19 +57,22 @@ DATA_DIR=$ROOT/data/multi30k-dataset/data/task1/raw
 #   --references $DATA_DIR/val.de \
 #   --checkpoint $CKPT \
 #   --model prefix_transformer \
-#   --parameters=prefix_length=64,learning_rate=7e-4,batch_size=4096,device_list=[0],update_cycle=2,eval_steps=20 \
-#   --hparam_set base
+#   --parameters=prefix_length=64,learning_rate=7e-4,batch_size=4096,device_list=[0,1,2,3],update_cycle=2,eval_steps=20 \
+#   --hparam_set big
 
 DATA_DIR=$ROOT/data/multi30k-dataset/data/task1
+CLIP_FEATURES=$DATA_DIR/clip-ViT-B_32.pkl
+IMG_PATH=/data2/share/data/flickr30k-entities/flickr30k-images
+mapping_type=mlp
 # visual prefix tuning
-CUDA_VISIBLE_DEVICES=4,5,6,7 python train.py \
-  --input $DATA_DIR/raw/train.32k.en.shuf $DATA_DIR/raw/train.32k.de.shuf \
-  --img_input $DATA_DIR/image_splits $DATA_DIR/clip-ViT-B_32.pkl \
-  --output $EXP/visual-prefix-tuning/${PRETRAIN_DATA}-mlp \
-  --vocabulary $VOCAB_DIR/vocab.32k.en.txt $VOCAB_DIR/vocab.32k.de.txt \
-  --validation $DATA_DIR/raw/val.32k.en \
-  --references $DATA_DIR/raw/val.de \
-  --checkpoint $CKPT \
-  --model visual_prefix_transformer \
-  --parameters=max_length=64,mapping_type=mlp,batch_size=128,device_list=[0,1,2,3],update_cycle=2,eval_steps=20 \
-  --hparam_set base
+# CUDA_VISIBLE_DEVICES=1 python train.py \
+#   --input $DATA_DIR/raw/train.32k.en.shuf $DATA_DIR/raw/train.32k.de.shuf \
+#   --img_input $DATA_DIR/image_splits $CLIP_FEATURES \
+#   --output $EXP/visual-prefix-tuning_v3/${PRETRAIN_DATA}-$mapping_type \
+#   --vocabulary $VOCAB_DIR/vocab.32k.en.txt $VOCAB_DIR/vocab.32k.de.txt \
+#   --validation $DATA_DIR/raw/val.32k.en \
+#   --references $DATA_DIR/raw/val.de \
+#   --checkpoint $CKPT \
+#   --model visual_prefix_transformer_v3 \
+#   --parameters=learning_rate=7e-4,clip_transformer_num_layers=8,max_length=64,mapping_type=$mapping_type,batch_size=128,device_list=[0],update_cycle=8,eval_steps=20 \
+#   --hparam_set big

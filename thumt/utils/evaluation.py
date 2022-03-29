@@ -125,7 +125,7 @@ def _evaluate_model(model, sorted_key, dataset, references, params):
         # Buffers for synchronization
         size = torch.zeros([dist.get_world_size()]).long()
         t_list = [torch.empty([params.decode_batch_size, pad_max]).long()
-                  for _ in range(dist.get_world_size())]
+                for _ in range(dist.get_world_size())]
         results = []
 
         while True:
@@ -134,6 +134,7 @@ def _evaluate_model(model, sorted_key, dataset, references, params):
                 batch_size = features["source"].shape[0]
             except:
                 features = {
+                    "image": torch.zeros([1, 3, 224, 224]).half(),
                     "img_feature": torch.zeros([1, 512]).float(),
                     "source": torch.ones([1, 1]).long(),
                     "source_mask": torch.ones([1, 1]).float()
@@ -184,6 +185,10 @@ def _evaluate_model(model, sorted_key, dataset, references, params):
 
     if dist.get_rank() == 0:
         restored_results = []
+        # for multimodal dataset
+        if len(results) != len(sorted_key):
+            num_process = dist.get_world_size()
+            results = [r for i, r in enumerate(results) if i%num_process == 0]
         for idx in range(len(results)):
             restored_results.append(results[sorted_key[idx]])
 

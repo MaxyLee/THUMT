@@ -14,6 +14,7 @@ import re
 import six
 import socket
 import time
+from sklearn import preprocessing
 import torch
 
 import numpy as np
@@ -24,7 +25,7 @@ import thumt.optimizers as optimizers
 import thumt.utils as utils
 import thumt.utils.summary as summary
 
-from thumt.data import M30kDataset, get_infer_dataset
+from thumt.data import M30kDataset, M30kDatasetv2, get_infer_dataset
 from torch.utils.data import DataLoader
 
 
@@ -420,17 +421,28 @@ def main(args):
     trainable_flags = print_variables(model, params.pattern,
                                       dist.get_rank() == 0)
 
-    if args.model == 'visual_prefix_transformer':
-        train_dataset = M30kDataset(params.input, params.img_input, params.vocabulary, params.device,
-                              params.max_length, params.bos, params.eos, params.pad, params.unk, 'train')
+    print('Loading datasets')
+    if 'visual_prefix_transformer' in args.model:
+        if args.model == 'visual_prefix_transformer_v2':
+            preprocess = model.preprocess
+            dtype = model.vision_dtype
+            train_dataset = M30kDatasetv2(params.input, params.img_input, params.vocabulary, params.device, preprocess,
+                                          dtype, params.max_length, params.bos, params.eos, params.pad, params.unk, 'train')
+        else:
+            preprocess = None
+            dtype = None
+            train_dataset = M30kDataset(params.input, params.img_input, params.vocabulary, params.device,
+                                params.max_length, params.bos, params.eos, params.pad, params.unk, 'train')
         train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
-        # import ipdb; ipdb.set_trace()
+
+        # fuck life
+        dataset = train_dataloader
     else:
         dataset = data.MTPipeline.get_train_dataset(params.input, params)
 
     if params.validation:
-        if args.model == 'visual_prefix_transformer':
-            sorted_key, eval_dataset = get_infer_dataset(params.validation, params)
+        if 'visual_prefix_transformer' in args.model:
+            sorted_key, eval_dataset = get_infer_dataset(params.validation, params, args.model, preprocess, dtype)
             eval_dataloader = DataLoader(eval_dataset, batch_size=params.decode_batch_size)
             # Still no choice
             eval_dataset = eval_dataloader
@@ -478,10 +490,6 @@ def main(args):
     counter = 0
 
     while True:
-        # I have no choice but to write this s**t code
-        if args.model == 'visual_prefix_transformer':
-            dataset = train_dataloader
-
         for features in dataset:
             if counter % params.update_cycle == 0:
                 step += 1

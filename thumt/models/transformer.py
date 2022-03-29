@@ -250,15 +250,6 @@ class Transformer(modules.Module):
         src_mask = features["source_mask"]
         batch_size = src_mask.shape[0]
 
-        if past_key_values is None:
-            past_length = 0
-            past_key_values = tuple([None] * self.params.num_encoder_layers)
-        else:
-            past_length = self.params.prefix_length
-
-            prefix_mask = torch.ones(batch_size, past_length)
-            src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
-
         inputs = torch.nn.functional.embedding(src_seq, self.src_embedding)
         inputs = inputs * (self.hidden_size ** 0.5)
         inputs = inputs + self.bias
@@ -270,6 +261,15 @@ class Transformer(modules.Module):
             prefix_mask = torch.ones(batch_size, prefix_length)
             src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
 
+        if past_key_values is None:
+            past_length = 0
+            past_key_values = tuple([None] * self.params.num_encoder_layers)
+        else:
+            past_length = self.params.prefix_length
+
+            prefix_mask = torch.ones(batch_size, past_length)
+            src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
+            
         inputs = nn.functional.dropout(self.encoding(inputs, past_length), self.dropout,
                                        self.training)
 

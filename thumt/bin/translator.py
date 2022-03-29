@@ -20,6 +20,8 @@ import torch.distributed as dist
 import thumt.models as models
 import thumt.utils as utils
 
+from thumt.data import get_infer_dataset
+from torch.utils.data import DataLoader
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -30,6 +32,8 @@ def parse_args():
     # input files
     parser.add_argument("--input", type=str, required=True, nargs="+",
                         help="Path to input file.")
+    parser.add_argument("--img_input", type=str, nargs=2, default=None,
+                        help="Path to image filepath and features")
     parser.add_argument("--output", type=str, required=True,
                         help="Path to output file.")
     parser.add_argument("--checkpoints", type=str, required=True, nargs="+",
@@ -44,6 +48,8 @@ def parse_args():
                         help="Name of the models.")
     parser.add_argument("--parameters", type=str, default="",
                         help="Additional hyper-parameters.")
+    parser.add_argument("--hparam_set", type=str,
+                        help="Name of pre-defined hyper-parameter set.")
 
     # mutually exclusive parameters
     group = parser.add_mutually_exclusive_group()
@@ -73,6 +79,9 @@ def default_params():
         decode_ratio=1.0,
         decode_length=50,
         decode_batch_size=32,
+        # visual perfix
+        max_length=64,
+        mapping_type='mlp'
     )
 
     return params
@@ -114,6 +123,8 @@ def import_params(model_dir, model_name, params):
 def override_params(params, args):
     params.parse(args.parameters.lower())
 
+    params.img_input = args.img_input
+
     params.vocabulary = {
         "source": data.Vocabulary(args.vocabulary[0]),
         "target": data.Vocabulary(args.vocabulary[1])
@@ -154,11 +165,14 @@ def main(args):
     model_cls_list = [models.get_model(model) for model in args.models]
     params_list = [default_params() for _ in range(len(model_cls_list))]
     params_list = [
-        merge_params(params, model_cls.default_params())
+        merge_params(params, model_cls.default_params(args.hparam_set))
         for params, model_cls in zip(params_list, model_cls_list)]
     params_list = [
         import_params(args.checkpoints[i], args.models[i], params_list[i])
         for i in range(len(args.checkpoints))]
+    for i in range(len(args.models)):
+        if 'prefix_transformer' in args.models[i]:
+            params_list[i] = import_params(f"{args.prefix.split('/model-')[0]}", args.models[i], params_list[i])
     params_list = [
         override_params(params_list[i], args)
         for i in range(len(model_cls_list))]
@@ -189,13 +203,15 @@ def main(args):
         model_list = []
 
         for i in range(len(args.models)):
-            if args.models[i] == 'prefix_transformer':
+            # prefix
+            if 'prefix_transformer' in args.models[i]:
                 print("Loading Transformer model...", flush=True)
                 transformer_model_cls = models.get_model('transformer')
                 if args.cpu:
                     transformer_model = transformer_model_cls(params)
                 else:
                     transformer_model = transformer_model_cls(params).cuda()
+
                 transformer_model.load_state_dict(
                     torch.load(utils.latest_checkpoint(args.checkpoints[i]),
                                map_location="cpu")["model"])
@@ -207,6 +223,7 @@ def main(args):
 
                 model = model_cls_list[i](transformer_model, params_list[i]).cuda()
                 model.load_prefix(args.prefix)
+            # normal
             else:
                 if args.cpu:
                     model = model_cls_list[i](params_list[i])
@@ -227,8 +244,20 @@ def main(args):
 
         if len(args.input) == 1:
             mode = "infer"
-            sorted_key, dataset = data.MTPipeline.get_infer_dataset(
-                args.input[0], params)
+            if 'visual_prefix_transformer' in args.models[i]:
+                if args.models[i] == 'visual_prefix_transformer_v2':
+                    preprocess = model.preprocess
+                    dtype = model.vision_dtype
+                else:
+                    preprocess = None
+                    dtype = None
+                sorted_key, eval_dataset = get_infer_dataset(args.input[0], params, args.models[i], preprocess, dtype)
+                eval_dataloader = DataLoader(eval_dataset, batch_size=params.decode_batch_size)
+                # Still no choice
+                dataset = eval_dataloader
+            else:
+                sorted_key, dataset = data.MTPipeline.get_infer_dataset(
+                    args.input[0], params)
         else:
             # Teacher-forcing
             mode = "eval"
@@ -258,6 +287,8 @@ def main(args):
                 batch_size = features["source"].shape[0]
             except:
                 features = {
+                    "image": torch.zeros([1, 3, 224, 224]).half(),
+                    "img_feature": torch.zeros([1, 512]).float(),
                     "source": torch.ones([1, 1]).long(),
                     "source_mask": torch.ones([1, 1]).float()
                 }
