@@ -245,7 +245,7 @@ def main(args):
         if len(args.input) == 1:
             mode = "infer"
             if 'visual_prefix_transformer' in args.models[i]:
-                if args.models[i] == 'visual_prefix_transformer_v2':
+                if args.models[i] == 'visual_prefix_transformer_v2' or args.models[i] == 'visual_prefix_transformer_v4':
                     preprocess = model.preprocess
                     dtype = model.vision_dtype
                 else:

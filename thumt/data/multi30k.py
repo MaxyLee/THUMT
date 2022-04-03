@@ -12,7 +12,7 @@ def get_infer_dataset(filename, params, model_name, preprocess, dtype):
     sorted_keys, sorted_data = _sort_input_file(filename)
     split = filename.split('/')[-1].split('.')[0]
 
-    if model_name == 'visual_prefix_transformer_v2':
+    if model_name == 'visual_prefix_transformer_v2' or model_name == 'visual_prefix_transformer_v4':
         dataset = M30kDatasetv2(sorted_data, params.img_input, 
                                 params.vocabulary, params.device, preprocess,
                                 dtype, params.max_length, params.bos, params.eos, 

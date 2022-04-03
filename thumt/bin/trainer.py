@@ -50,6 +50,8 @@ def parse_args(args=None):
                         help="Pattern to reference files.")
     parser.add_argument("--checkpoint", type=str,
                         help="Path to pre-trained checkpoint.")
+    parser.add_argument("--vit_checkpoint", type=str,
+                        help="Path to pre-trained vision transformer checkpoint.")
     parser.add_argument("--distributed", action="store_true",
                         help="Enable distributed training.")
     parser.add_argument("--local_rank", type=int,
@@ -187,6 +189,7 @@ def override_params(params, args):
     params.model = args.model or params.model
     params.input = args.input or params.input
     params.img_input = args.img_input
+    params.vit_checkpoint = args.vit_checkpoint
     params.output = args.output or params.output
     params.vocab = args.vocabulary or params.vocab
     params.validation = args.validation or params.validation
@@ -422,8 +425,9 @@ def main(args):
                                       dist.get_rank() == 0)
 
     print('Loading datasets')
-    if 'visual_prefix_transformer' in args.model:
-        if args.model == 'visual_prefix_transformer_v2':
+    if 'visual_prefix_transformer' in args.model or 'multi30k' in params.input[0]:
+        print('using multi30k dataset')
+        if args.model == 'visual_prefix_transformer_v2' or args.model == 'visual_prefix_transformer_v4':
             preprocess = model.preprocess
             dtype = model.vision_dtype
             train_dataset = M30kDatasetv2(params.input, params.img_input, params.vocabulary, params.device, preprocess,
@@ -441,7 +445,7 @@ def main(args):
         dataset = data.MTPipeline.get_train_dataset(params.input, params)
 
     if params.validation:
-        if 'visual_prefix_transformer' in args.model:
+        if 'visual_prefix_transformer' in args.model or 'multi30k' in params.input[0]:
             sorted_key, eval_dataset = get_infer_dataset(params.validation, params, args.model, preprocess, dtype)
             eval_dataloader = DataLoader(eval_dataset, batch_size=params.decode_batch_size)
             # Still no choice

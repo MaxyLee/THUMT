@@ -154,6 +154,7 @@ class VisualPrefixTransformer(modules.Module):
         params.learning_rate = 7e-4
 
         params.add_hparam('mapping_type', 'mlp')
+        params.add_hparam('prefix_length', 64)
         params.add_hparam('visual_prefix_length', 10)
         params.add_hparam('visual_prefix_size', 512)
         # params.add_hparam('clip_length', 10)

@@ -7,8 +7,6 @@ import os
 
 from PIL import Image
 from tqdm import tqdm
-from glob import glob
-
 
 
 def main(clip_model_type: str):
@@ -23,7 +21,7 @@ def main(clip_model_type: str):
     print(f"Loading clip {clip_model_type} model...")
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
     print("Done")
-
+    import ipdb; ipdb.set_trace()
     # filenames = glob(f"{img_path}/*.jpg")
     img_split = '/data1/private/mxy/projects/mmt/data/multi30k-dataset/data/task1/image_splits/test_2017_mscoco.txt'
     with open(img_split, 'r') as f:
