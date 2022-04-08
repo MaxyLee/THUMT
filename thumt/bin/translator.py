@@ -38,6 +38,8 @@ def parse_args():
                         help="Path to output file.")
     parser.add_argument("--checkpoints", type=str, required=True, nargs="+",
                         help="Path to trained checkpoints.")
+    parser.add_argument("--vit_checkpoint", type=str, default=None,
+                        help="Path to pre-trained vision transformer checkpoint.")
     parser.add_argument("--vocabulary", type=str, nargs=2, required=True,
                         help="Path to source and target vocabulary.")
     parser.add_argument("--prefix", type=str, default="",
@@ -124,6 +126,7 @@ def override_params(params, args):
     params.parse(args.parameters.lower())
 
     params.img_input = args.img_input
+    params.vit_checkpoint = args.vit_checkpoint
 
     params.vocabulary = {
         "source": data.Vocabulary(args.vocabulary[0]),
@@ -287,7 +290,7 @@ def main(args):
                 batch_size = features["source"].shape[0]
             except:
                 features = {
-                    "image": torch.zeros([1, 3, 224, 224]).half(),
+                    "image": torch.zeros([1, 3, 224, 224]).float(),
                     "img_feature": torch.zeros([1, 512]).float(),
                     "source": torch.ones([1, 1]).long(),
                     "source_mask": torch.ones([1, 1]).float()

@@ -64,7 +64,8 @@ class VisualPrefixTransformer(modules.Module):
 
     def get_vision_encoder(self):
         vit = VisionTransformer(self.params.image_resolution, self.params.vision_patch_size, self.params.vision_width, self.params.vision_layers, self.params.vision_heads, self.visual_prefix_size)
-        vit.load_state_dict(torch.load(self.params.vit_checkpoint))
+        if self.params.vit_checkpoint is not None:
+            vit.load_state_dict(torch.load(self.params.vit_checkpoint))
 
         return vit
 
@@ -85,7 +86,7 @@ class VisualPrefixTransformer(modules.Module):
         self.load_state_dict(state["model"])
 
     def encode(self, features, state):
-        img_features = self.vision_encoder(features['image']).float()
+        img_features = self.vision_encoder(features['image'])
         visual_prefix = self.visual_prefix_net(img_features)
 
         state = self.transformer_model.encode(features, state, prefix=visual_prefix)
@@ -121,8 +122,8 @@ class VisualPrefixTransformer(modules.Module):
     def default_params(name=None):
         params = Transformer.default_params(name)
 
-        params.train_steps = 10000
-        params.warmup_steps = 400
+        params.train_steps = 20000
+        params.warmup_steps = 800
         params.learning_rate = 7e-4
 
         params.add_hparam('mapping_type', 'mlp')

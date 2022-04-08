@@ -87,7 +87,7 @@ def default_params():
         max_length=256,
         buffer_size=10000,
         # Prefix
-        prefix_length=64,
+        prefix_length=10,
         # Initialization
         initializer_gain=1.0,
         initializer="uniform_unit_scaling",

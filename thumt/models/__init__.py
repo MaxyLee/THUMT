@@ -11,7 +11,7 @@ import thumt.models.visual_prefix
 import thumt.models.visual_prefix_v2
 import thumt.models.visual_prefix_v3
 import thumt.models.visual_prefix_v4
-
+import thumt.models.visual_prefix_v5
 
 def get_model(name):
     name = name.lower()
@@ -28,5 +28,7 @@ def get_model(name):
         return thumt.models.visual_prefix_v3.VisualPrefixTransformer
     elif name == "visual_prefix_transformer_v4":
         return thumt.models.visual_prefix_v4.VisualPrefixTransformer
+    elif name == "visual_prefix_transformer_v5":
+        return thumt.models.visual_prefix_v5.VisualPrefixTransformer
     else:
         raise LookupError("Unknown model %s" % name)

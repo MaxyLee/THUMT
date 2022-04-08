@@ -134,7 +134,7 @@ def _evaluate_model(model, sorted_key, dataset, references, params):
                 batch_size = features["source"].shape[0]
             except:
                 features = {
-                    "image": torch.zeros([1, 3, 224, 224]).half(),
+                    "image": torch.zeros([1, 3, 224, 224]).float(),
                     "img_feature": torch.zeros([1, 512]).float(),
                     "source": torch.ones([1, 1]).long(),
                     "source_mask": torch.ones([1, 1]).float()
