@@ -1,7 +1,31 @@
 import torch
+import pickle
+import skimage.io as io
 
 from torch import nn
+from PIL import Image
+from tqdm import tqdm
 from clip.model import LayerNorm, Transformer
+
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
+
+try:
+    from torchvision.transforms import InterpolationMode
+    BICUBIC = InterpolationMode.BICUBIC
+except ImportError:
+    BICUBIC = Image.BICUBIC
+
+def _convert_image_to_rgb(image):
+    return image.convert("RGB")
+
+def _transform(n_px):
+    return Compose([
+        Resize(n_px, interpolation=BICUBIC),
+        CenterCrop(n_px),
+        _convert_image_to_rgb,
+        ToTensor(),
+        Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+    ])
 
 class VisionTransformer(nn.Module):
     def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int):
@@ -39,7 +63,7 @@ class VisionTransformer(nn.Module):
 
         return x
 
-if __name__ == '__main__':
+def extract_all_features():
     embed_dim = 512
     vision_width = 768
     vision_layers = 12
@@ -55,5 +79,53 @@ if __name__ == '__main__':
 
     vit.load_state_dict(state_dict)
 
-    # import ipdb; ipdb.set_trace()
-    
+    preprocess = _transform(image_resolution)
+
+    dataset_names = [
+                     'train', 
+                     'val', 
+                     'test_2016_flickr', 
+                     'test_2017_flickr', 
+                     'test_2018_flickr', 
+                     'test_2017_mscoco'
+                    ]
+    image_paths = [
+                   "/data2/share/data/flickr30k-entities/flickr30k-images", 
+                   "/data2/share/data/flickr30k-entities/flickr30k-images",
+                   "/data2/share/data/flickr30k-entities/flickr30k-images",
+                   "/data1/private/mxy/projects/mmt/data/multi30k-dataset/data/task1/test2017",
+                   "/data1/private/mxy/projects/mmt/data/multi30k-dataset/data/task1/test2018",
+                   "/data2/share/data/coco2014"
+                   ]
+    fn_path = '/data1/private/mxy/projects/mmt/data/multi30k-dataset/data/task1/image_splits'
+    for dn, ip in zip(dataset_names, image_paths):
+        out_path = f"/data1/private/mxy/projects/mmt/data/multi30k-dataset/data/task1/vit-{dn}.pkl"
+        with open(f'{fn_path}/{dn}.txt') as f:
+            filenames = f.read().splitlines()
+
+        all_features = {}
+        for img_name in tqdm(filenames, desc=dn):
+            if 'COCO' in img_name:
+                img_name = img_name.split('#')[0]
+                if 'train' in img_name:
+                    img_path = f'{ip}/train2014/{img_name}'
+                else:
+                    img_path = f'{ip}/val2014/{img_name}'
+            else:
+                img_path = f'{ip}/{img_name}'
+
+            img_id = img_name[:-4]
+            
+            image = io.imread(img_path)
+            image = preprocess(Image.fromarray(image)).unsqueeze(0)
+
+            with torch.no_grad():
+                img_feature = vit(image)
+            
+            all_features[img_id] = img_feature.squeeze()
+        
+        with open(out_path, 'wb') as f:
+            pickle.dump(all_features, f)
+
+if __name__ == '__main__':
+    extract_all_features()

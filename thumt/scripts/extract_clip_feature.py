@@ -20,7 +20,7 @@ def main(clip_model_type: str):
     os.makedirs(out_path, exist_ok=True)
 
     print(f"Loading clip {clip_model_type} model...")
-    clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
+    # clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
     print("Done")
     import ipdb; ipdb.set_trace()
     filenames = glob(f"{image_path}/*.jpg")
