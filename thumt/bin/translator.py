@@ -208,23 +208,29 @@ def main(args):
         for i in range(len(args.models)):
             # prefix
             if 'prefix_transformer' in args.models[i]:
-                print("Loading Transformer model...", flush=True)
-                transformer_model_cls = models.get_model('transformer')
-                if args.cpu:
-                    transformer_model = transformer_model_cls(params)
+                if args.models[i] != 'visual_prefix_transformer_v6':
+                    print("Loading Transformer model...", flush=True)
+                    transformer_model_cls = models.get_model('transformer')
+                    if args.cpu:
+                        transformer_model = transformer_model_cls(params)
+                    else:
+                        transformer_model = transformer_model_cls(params).cuda()
+
+                    transformer_model.load_state_dict(
+                        torch.load(utils.latest_checkpoint(args.checkpoints[i]),
+                                map_location="cpu")["model"])
+
+                    print("Finished.", flush=True)
+
+                    if args.half:
+                        transformer_model = transformer_model.half()
+
+                    model = model_cls_list[i](transformer_model, params_list[i]).cuda()
                 else:
-                    transformer_model = transformer_model_cls(params).cuda()
-
-                transformer_model.load_state_dict(
-                    torch.load(utils.latest_checkpoint(args.checkpoints[i]),
-                               map_location="cpu")["model"])
-
-                print("Finished.", flush=True)
-
-                if args.half:
-                    transformer_model = transformer_model.half()
-
-                model = model_cls_list[i](transformer_model, params_list[i]).cuda()
+                    model = model_cls_list[i](params_list[i]).cuda()
+                    if model.params.prefix_only:
+                        state = torch.load(args.checkpoints[i], map_location="cpu")
+                        model.transformer_model.load_state_dict(state["model"])
                 model.load_prefix(args.prefix)
             # normal
             else:
@@ -291,7 +297,7 @@ def main(args):
             except:
                 features = {
                     "image": torch.zeros([1, 3, 224, 224]).float(),
-                    "img_feature": torch.zeros([1, 512]).float(),
+                    "img_feature": torch.zeros([1, 50, 512]).float(),
                     "source": torch.ones([1, 1]).long(),
                     "source_mask": torch.ones([1, 1]).float()
                 }

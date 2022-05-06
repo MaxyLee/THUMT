@@ -8,9 +8,11 @@ from torch.utils.data import Dataset
 from thumt.data.pipeline import _sort_input_file
 from thumt.tokenizers import WhiteSpaceTokenizer
 
-def get_infer_dataset(filename, params, model_name, preprocess, dtype):
-    sorted_keys, sorted_data = _sort_input_file(filename)
+def get_infer_dataset(filename, params, model_name, preprocess, dtype, raw=False):
+    sorted_key, sorted_data = _sort_input_file(filename)
     split = filename.split('/')[-1].split('.')[0]
+
+    sorted_keys = {v:k for k,v in sorted_key.items()}
 
     if model_name == 'visual_prefix_transformer_v2' or model_name == 'visual_prefix_transformer_v4':
         dataset = M30kDatasetv2(sorted_data, params.img_input, 
@@ -21,24 +23,26 @@ def get_infer_dataset(filename, params, model_name, preprocess, dtype):
         dataset = M30kDataset(sorted_data, params.img_input, 
                               params.vocabulary, params.device,
                               params.max_length, params.bos, params.eos, 
-                              params.pad, params.unk, split, sorted_keys)
+                              params.pad, params.unk, split, sorted_keys, raw)
         
 
-    return sorted_keys, dataset
+    return sorted_key, dataset
 
 class M30kDataset(Dataset):
-    def __init__(self, 
-                 txt_input, 
-                 img_input, 
-                 vocab, 
+    def __init__(self,
+                 txt_input,
+                 img_input,
+                 vocab,
                  device,
-                 seq_len=64, 
-                 bos=b'<bos>', 
-                 eos=b'<eos>', 
-                 pad=b'<pad>', 
+                 seq_len=64,
+                 bos=b'<bos>',
+                 eos=b'<eos>',
+                 pad=b'<pad>',
                  unk=b'<unk>',
                  split='train',
-                 sorted_keys=None
+                 sorted_keys=None,
+                 raw=False,
+                 fewshot_ratio=1.0
         ):
         self.bos = bos
         self.eos = eos
@@ -53,29 +57,36 @@ class M30kDataset(Dataset):
         self.tgt_vocab = vocab['target']
 
         self.sorted_keys = sorted_keys
+        self.raw = raw
+        self.fewshot_ratio = fewshot_ratio
+
+        if fewshot_ratio != 1.0:
+            print(f'Using {int(fewshot_ratio * 100)}% of training data!')
 
         self.pad_id = self.src_vocab[pad]
         self.unk_id = self.src_vocab[unk]
         
         if sorted_keys is not None:
-            self.src_txt = self.load_text(txt_input, self.src_vocab, None, self.eos)
+            self.src_txt, self.src_raw = self.load_text(txt_input, self.src_vocab, None, self.eos)
         else:
-            self.src_txt = self.load_text(txt_input[0], self.src_vocab, None, self.eos)
+            self.src_txt, self.src_raw = self.load_text(txt_input[0], self.src_vocab, None, self.eos)
 
         if split == 'train':
-            self.tgt_txt = self.load_text(txt_input[1], self.tgt_vocab, self.bos, None)
-            self.lbl_txt = self.load_text(txt_input[1], self.tgt_vocab, None, self.eos)
+            self.tgt_txt, self.tgt_raw = self.load_text(txt_input[1], self.tgt_vocab, self.bos, None)
+            self.lbl_txt, self.lbl_raw = self.load_text(txt_input[1], self.tgt_vocab, None, self.eos)
 
         self.img_ids, self.img_features = self.load_image_features(img_input[0], img_input[1])
 
         assert len(self.src_txt) == len(self.img_ids)
 
     def __len__(self):
-        return len(self.src_txt)
+        return int(len(self.src_txt) * self.fewshot_ratio)
 
     def __getitem__(self, idx):
         src_seq = torch.tensor(self.src_txt[idx])
         src_mask = (src_seq != self.pad_id).float()
+
+        src_raw = self.src_raw[idx]
 
         # if the dataset is sorted
         if self.sorted_keys is not None:
@@ -89,6 +100,12 @@ class M30kDataset(Dataset):
             "source": src_seq.cuda(self.device),
             "source_mask": src_mask.cuda(self.device)
         }
+
+        if self.raw:
+            features.update({
+                "raw_source": src_raw,
+                "imgid": img_id,
+            })
 
         if self.split == 'train':
             tgt_seq = torch.tensor(self.tgt_txt[idx])
@@ -104,6 +121,7 @@ class M30kDataset(Dataset):
 
     def load_text(self, txt_input, vocab, bos=None, eos=None):
         sentences = []
+        raw = []
         if isinstance(txt_input, str):
             with open(txt_input, 'rb') as fin:
                 lines = fin.read().splitlines()
@@ -135,7 +153,8 @@ class M30kDataset(Dataset):
                     break
             
             sentences.append(tokens)
-        return sentences
+            raw.append(line)
+        return sentences, raw
 
     def load_image_features(self, filepath, feature_path):
         if self.split == 'train':

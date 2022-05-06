@@ -14,7 +14,6 @@ import re
 import six
 import socket
 import time
-from sklearn import preprocessing
 import torch
 
 import numpy as np
@@ -38,6 +37,8 @@ def parse_args(args=None):
     # input files
     parser.add_argument("--input", type=str, nargs=2,
                         help="Path to source and target corpus.")
+    parser.add_argument("--fewshot_ratio", type=float, default=1,
+                        help="Use only part of training data.")
     parser.add_argument("--img_input", type=str, nargs=2, default=None,
                         help="Path to image filepath and features")
     parser.add_argument("--output", type=str, default="train",
@@ -383,7 +384,7 @@ def main(args):
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
     # prefix tuning
-    if 'prefix_transformer' in args.model:
+    if ('prefix_transformer' in args.model or 'selective_attn' in args.model) and args.model != 'visual_prefix_transformer_v6':
         print("Loading Transformer model...", flush=True)
         transformer_model_cls = models.get_model('transformer')
         transformer_model = transformer_model_cls(params).cuda()
@@ -425,7 +426,7 @@ def main(args):
                                       dist.get_rank() == 0)
 
     print('Loading datasets')
-    if 'visual_prefix_transformer' in args.model or 'multi30k' in params.input[0]:
+    if 'visual_prefix_transformer' in args.model or 'selective_attn' in args.model or 'multi30k' in params.input[0]:
         print('using multi30k dataset')
         if args.model == 'visual_prefix_transformer_v2' or args.model == 'visual_prefix_transformer_v4':
             preprocess = model.preprocess
@@ -436,7 +437,7 @@ def main(args):
             preprocess = None
             dtype = None
             train_dataset = M30kDataset(params.input, params.img_input, params.vocabulary, params.device,
-                                params.max_length, params.bos, params.eos, params.pad, params.unk, 'train')
+                                params.max_length, params.bos, params.eos, params.pad, params.unk, 'train', fewshot_ratio=args.fewshot_ratio)
         train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
 
         # fuck life
@@ -467,10 +468,15 @@ def main(args):
         if 'prefix_transformer' not in args.model:
             state = torch.load(args.checkpoint, map_location="cpu")
             model.load_state_dict(state["model"])
+            step = params.initial_step
         else:
             state = torch.load(args.checkpoint, map_location="cpu")
-            transformer_model.load_state_dict(state["model"])
-        step = params.initial_step
+            if args.model == 'visual_prefix_transformer_v6':
+                model.transformer_model.load_state_dict(state["model"])
+            else:
+                transformer_model.load_state_dict(state["model"])
+            step = 0
+        
         epoch = 0
         broadcast(model)
     elif checkpoint is not None:

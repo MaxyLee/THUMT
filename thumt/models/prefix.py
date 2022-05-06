@@ -13,17 +13,18 @@ def _split_heads(tensor, num_heads, attn_head_size):
     return tensor.permute(0, 2, 1, 3)
 
 class PrefixNet(nn.Module):
-    def __init__(self, length, emb_size, hidden_size):
+    def __init__(self, length, emb_size, hidden_size, dropout=0.0):
         super(PrefixNet, self).__init__()
 
         self.emb = nn.Parameter(torch.empty([length, emb_size]))
         self.mlp1 = nn.Linear(emb_size, hidden_size)
         self.mlp2 = nn.Linear(hidden_size, emb_size)
+        self.dropout = nn.Dropout(dropout)
 
         self.reset_parameters()
 
     def forward(self):
-        return self.mlp2(torch.tanh(self.mlp1(self.emb)))
+        return self.dropout(self.mlp2(torch.tanh(self.mlp1(self.emb))))
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.emb)

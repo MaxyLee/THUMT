@@ -4,8 +4,10 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from lib2to3.pgen2.tokenize import tokenize
 
 import math
+import sacrebleu
 
 from collections import Counter
 
@@ -110,3 +112,32 @@ def bleu(trans, refs, bp="closest", smooth=False, n=4, weights=None):
     score = bp * math.exp(log_precision)
 
     return score
+
+def eval_moses_bleu(ref, hyp):
+    """
+    Given a file of hypothesis and reference files,
+    evaluate the BLEU score using Moses scripts.
+    """
+    hyps, refs = [], []
+
+    with open(hyp) as fh, open(ref) as rh:
+        for line in fh:
+            hyps.append(line.strip())
+
+        for line in rh:
+            refs.append(line.strip())
+
+        score = sacrebleu.corpus_bleu(hyps, [refs], tokenize='none').score
+
+    return score
+
+if __name__ == '__main__':
+    import sys
+    ref, hyp = sys.argv[1], sys.argv[2]
+    # out_filename = sys.argv[3]
+    score = eval_moses_bleu(ref, hyp)
+
+    print(score)
+
+    # with open(out_filename, 'w') as fout:
+    #     fout.write(str(score))

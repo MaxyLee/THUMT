@@ -26,24 +26,34 @@ class AttentionSubLayer(modules.Module):
                 params.hidden_size, params.num_heads, params.attention_dropout)
             self.layer_norm = modules.LayerNorm(params.hidden_size)
 
-    def forward(self, x, bias, memory=None, state=None, layer_past=None):
+    def forward(self, x, bias, memory=None, state=None, layer_past=None, return_weights=False):
         if self.normalization == "before":
             y = self.layer_norm(x)
         else:
             y = x
 
         if self.training or state is None:
-            y = self.attention(y, bias, memory, kv=None, layer_past=layer_past)
+            if return_weights:
+                y, w = self.attention(y, bias, memory, kv=None, layer_past=layer_past, return_weights=return_weights)
+            else:
+                y = self.attention(y, bias, memory, kv=None, layer_past=layer_past)
         else:
             kv = [state["k"], state["v"]]
-            y, k, v = self.attention(y, bias, memory, kv, layer_past)
+            if return_weights:
+                y, k, v, w = self.attention(y, bias, memory, kv, layer_past, return_weights)
+            else:
+                y, k, v = self.attention(y, bias, memory, kv, layer_past)
             state["k"], state["v"] = k, v
 
         y = nn.functional.dropout(y, self.dropout, self.training)
 
         if self.normalization == "before":
+            if return_weights:
+                return x + y, w    
             return x + y
         else:
+            if return_weights:
+                return self.layer_norm(x + y), w  
             return self.layer_norm(x + y)
 
 
@@ -85,9 +95,14 @@ class TransformerEncoderLayer(modules.Module):
             self.self_attention = AttentionSubLayer(params)
             self.feed_forward = FFNSubLayer(params)
 
-    def forward(self, x, bias, layer_past=None):
-        x = self.self_attention(x, bias, layer_past=layer_past)
+    def forward(self, x, bias, layer_past=None, return_weights=False):
+        if return_weights:
+            x, w = self.self_attention(x, bias, layer_past=layer_past, return_weights=return_weights)
+        else:
+            x = self.self_attention(x, bias, layer_past=layer_past)
         x = self.feed_forward(x)
+        if return_weights:
+            return x, w
         return x
 
 
@@ -103,7 +118,7 @@ class TransformerDecoderLayer(modules.Module):
                                                     name="encdec_attention")
             self.feed_forward = FFNSubLayer(params)
 
-    def __call__(self, x, attn_bias, encdec_bias, memory, state=None, layer_past=None):
+    def __call__(self, x, attn_bias, encdec_bias, memory, state=None, layer_past=None, return_weights=False):
         x = self.self_attention(x, attn_bias, state=state, layer_past=layer_past)
         x = self.encdec_attention(x, encdec_bias, memory)
         x = self.feed_forward(x)
@@ -126,13 +141,20 @@ class TransformerEncoder(modules.Module):
             else:
                 self.layer_norm = None
 
-    def forward(self, x, bias, past_key_values):
+    def forward(self, x, bias, past_key_values, return_weights=False):
+        weights = []
         for layer, layer_past in zip(self.layers, past_key_values):
-            x = layer(x, bias, layer_past)
+            if return_weights:
+                x, w = layer(x, bias, layer_past, return_weights)
+                weights.append(w)
+            else:
+                x = layer(x, bias, layer_past)
 
         if self.normalization == "before":
             x = self.layer_norm(x)
 
+        if return_weights:
+            return x, weights
         return x
 
 
@@ -153,17 +175,29 @@ class TransformerDecoder(modules.Module):
             else:
                 self.layer_norm = None
 
-    def forward(self, x, attn_bias, encdec_bias, memory, past_key_values, state=None):
+    def forward(self, x, attn_bias, encdec_bias, memory, past_key_values, state=None, return_weights=False):
+        weights = []
         for i, (layer, layer_past) in enumerate(zip(self.layers, past_key_values)):
             if state is not None:
-                x = layer(x, attn_bias, encdec_bias, memory,
-                          state=state["decoder"]["layer_%d" % i], layer_past=layer_past)
+                if return_weights:
+                    x, w = layer(x, attn_bias, encdec_bias, memory,
+                            state=state["decoder"]["layer_%d" % i], layer_past=layer_past, return_weights=return_weights)
+                    weights.append(w)
+                else:
+                    x = layer(x, attn_bias, encdec_bias, memory,
+                            state=state["decoder"]["layer_%d" % i], layer_past=layer_past)
             else:
-                x = layer(x, attn_bias, encdec_bias, memory, None, layer_past)
+                if return_weights:
+                    x, w = layer(x, attn_bias, encdec_bias, memory, None, layer_past, return_weights)
+                    weights.append(w)
+                else:
+                    x = layer(x, attn_bias, encdec_bias, memory, None, layer_past)
 
         if self.normalization == "before":
             x = self.layer_norm(x)
 
+        if return_weights:
+            return x, weights
         return x
 
 
@@ -245,7 +279,7 @@ class Transformer(modules.Module):
             nn.init.normal_(self.softmax_weights, mean=0.0,
                             std=self.params.hidden_size ** -0.5)
 
-    def encode(self, features, state, past_key_values=None, prefix=None):
+    def encode(self, features, state, past_key_values=None, prefix=None, return_weights=False):
         src_seq = features["source"]
         src_mask = features["source_mask"]
         batch_size = src_mask.shape[0]
@@ -272,17 +306,21 @@ class Transformer(modules.Module):
             
         inputs = nn.functional.dropout(self.encoding(inputs, past_length), self.dropout,
                                        self.training)
-
+        
         enc_attn_bias = self.masking_bias(src_mask)
         enc_attn_bias = enc_attn_bias.to(inputs)
-        encoder_output = self.encoder(inputs, enc_attn_bias, past_key_values)
+        if return_weights:
+            encoder_output, weights = self.encoder(inputs, enc_attn_bias, past_key_values, return_weights)
+            state['encoder_weights'] = weights
+        else:
+            encoder_output = self.encoder(inputs, enc_attn_bias, past_key_values)
 
         state["encoder_output"] = encoder_output
         state["enc_attn_bias"] = enc_attn_bias[:, :, :, past_length:]
 
         return state
 
-    def decode(self, features, state, mode="infer", past_key_values=None):
+    def decode(self, features, state, mode="infer", past_key_values=None, return_weights=False):
         tgt_seq = features["target"]
         tgt_length = tgt_seq.shape[1]
 

@@ -128,7 +128,7 @@ class MultiHeadAttention(MultiHeadAttentionBase):
 
         self.reset_parameters()
 
-    def forward(self, query, bias, memory=None, kv=None, layer_past=None):
+    def forward(self, query, bias, memory=None, kv=None, layer_past=None, return_weights=False):
         q = self.q_transform(query)
 
         if memory is not None:
@@ -180,8 +180,12 @@ class MultiHeadAttention(MultiHeadAttentionBase):
         output = self.o_transform(self.combine_heads(x))
 
         if kv is not None:
+            if return_weights:
+                return output, k, v, weights
             return output, k, v
 
+        if return_weights:
+            return output, weights
         return output
 
     def reset_parameters(self, initializer="uniform_scaling", **kwargs):
