@@ -42,7 +42,7 @@ class M30kDataset(Dataset):
                  split='train',
                  sorted_keys=None,
                  raw=False,
-                 fewshot_ratio=1.0
+                 fewshot_name=None
         ):
         self.bos = bos
         self.eos = eos
@@ -58,10 +58,10 @@ class M30kDataset(Dataset):
 
         self.sorted_keys = sorted_keys
         self.raw = raw
-        self.fewshot_ratio = fewshot_ratio
+        self.fewshot_name = fewshot_name
 
-        if fewshot_ratio != 1.0:
-            print(f'Using {int(fewshot_ratio * 100)}% of training data!')
+        if fewshot_name is not None:
+            print(f'Using few-shot setting: {fewshot_name}')
 
         self.pad_id = self.src_vocab[pad]
         self.unk_id = self.src_vocab[unk]
@@ -80,7 +80,7 @@ class M30kDataset(Dataset):
         assert len(self.src_txt) == len(self.img_ids)
 
     def __len__(self):
-        return int(len(self.src_txt) * self.fewshot_ratio)
+        return len(self.src_txt)
 
     def __getitem__(self, idx):
         src_seq = torch.tensor(self.src_txt[idx])
@@ -158,7 +158,10 @@ class M30kDataset(Dataset):
 
     def load_image_features(self, filepath, feature_path):
         if self.split == 'train':
-            fn = f'{filepath}/{self.split}.txt.shuf'
+            if self.fewshot_name is None:
+                fn = f'{filepath}/{self.split}.txt.shuf'
+            else:
+                fn = f'{filepath}/{self.fewshot_name}.txt'
         else:
             fn = f'{filepath}/{self.split}.txt'
         with open(fn, 'r') as fin:

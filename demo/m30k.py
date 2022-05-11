@@ -21,7 +21,7 @@ def load_image(image_path, imgid):
 
 @st.cache
 def load_dataset(split):
-    if split == 'test_2016_flickr':
+    if split == 'train' or split == 'test_2016_flickr':
         image_path = f'{data_path}/flickr30k-images'
     elif split == 'test_2017_flickr':
         image_path = f'{data_path}/test2017'
@@ -59,7 +59,7 @@ def select_dataset(splits):
     return split
 
 if __name__ == '__main__':
-    splits = ['test_2016_flickr', 'test_2017_flickr', 'test_2018_flickr', 'test_2017_mscoco']
+    splits = ['train', 'test_2016_flickr', 'test_2017_flickr', 'test_2018_flickr', 'test_2017_mscoco']
 
     split = select_dataset(splits)
     image_path, image_ids, en, de, trans = load_dataset(split)

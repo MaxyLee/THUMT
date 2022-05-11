@@ -299,7 +299,7 @@ class Transformer(modules.Module):
             past_length = 0
             past_key_values = tuple([None] * self.params.num_encoder_layers)
         else:
-            past_length = self.params.prefix_length
+            past_length = self.params.visual_prefix_length
 
             prefix_mask = torch.ones(batch_size, past_length)
             src_mask = torch.cat([prefix_mask, src_mask], dim=-1)
@@ -332,7 +332,7 @@ class Transformer(modules.Module):
             past_key_values = tuple([None] * self.params.num_decoder_layers)
 
         else:
-            past_length = self.params.prefix_length
+            past_length = self.params.visual_prefix_length
 
             prefix_attn_bias = torch.zeros(tgt_length, past_length)
             prefix_attn_bias = prefix_attn_bias[None, None, :, :]

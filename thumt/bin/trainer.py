@@ -37,8 +37,8 @@ def parse_args(args=None):
     # input files
     parser.add_argument("--input", type=str, nargs=2,
                         help="Path to source and target corpus.")
-    parser.add_argument("--fewshot_ratio", type=float, default=1,
-                        help="Use only part of training data.")
+    parser.add_argument("--fewshot_name", type=str, default=None,
+                        help="Few-shot training.")
     parser.add_argument("--img_input", type=str, nargs=2, default=None,
                         help="Path to image filepath and features")
     parser.add_argument("--output", type=str, default="train",
@@ -437,7 +437,7 @@ def main(args):
             preprocess = None
             dtype = None
             train_dataset = M30kDataset(params.input, params.img_input, params.vocabulary, params.device,
-                                params.max_length, params.bos, params.eos, params.pad, params.unk, 'train', fewshot_ratio=args.fewshot_ratio)
+                                params.max_length, params.bos, params.eos, params.pad, params.unk, 'train', fewshot_name=args.fewshot_name)
         train_dataloader = DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
 
         # fuck life

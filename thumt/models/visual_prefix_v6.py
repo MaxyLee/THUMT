@@ -17,11 +17,12 @@ class VisualPrefixNet(nn.Module):
         super(VisualPrefixNet, self).__init__()
 
         self.emb = nn.Parameter(torch.empty([visual_prefix_length, hidden_size]))
+        self.visual_dropout = nn.Dropout(dropout)
         self.visual_mapping = nn.Linear(visual_prefix_size, hidden_size)
         self.cross_attn = MultiHeadAttention(hidden_size, num_heads)
         self.mlp1 = nn.Linear(hidden_size, hidden_size*4)
         self.mlp2 = nn.Linear(hidden_size*4, hidden_size)
-        self.dropout = nn.Dropout(dropout)
+        # self.dropout = nn.Dropout(dropout)
 
         self.reset_parameters()
 
@@ -29,8 +30,8 @@ class VisualPrefixNet(nn.Module):
         if return_weights:
             x, weights = self.cross_attn(self.emb.unsqueeze(0), bias=None, memory=self.visual_mapping(x), return_weights=return_weights)
             return self.dropout(self.mlp2(torch.tanh(self.mlp1(x)))), weights
-        x = self.cross_attn(self.emb.unsqueeze(0), bias=None, memory=self.visual_mapping(x))
-        return self.dropout(self.mlp2(torch.tanh(self.mlp1(x))))
+        x = self.cross_attn(self.emb.unsqueeze(0), bias=None, memory=self.visual_mapping(self.visual_dropout(x)))
+        return self.mlp2(torch.tanh(self.mlp1(x)))
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.emb)
@@ -196,7 +197,7 @@ class VisualPrefixTransformer(modules.Module):
 
     def encode(self, features, state, return_weights=False):
         batch_size = features['source'].shape[0]
-        import ipdb; ipdb.set_trace()
+
         prefix_state = self.get_prefix('encode', batch_size, img_feature=features['img_feature'], return_weights=return_weights)
         
         state = self.transformer_model.encode(features, state, past_key_values=prefix_state['prefix'], return_weights=return_weights)
