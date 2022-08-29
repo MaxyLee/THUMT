@@ -164,6 +164,9 @@ class M30kDataset(Dataset):
                 fn = f'{filepath}/{self.fewshot_name}.txt'
         else:
             fn = f'{filepath}/{self.split}.txt'
+            # if self.fewshot_name is not None and 'dog' in self.fewshot_name:
+            #     fn = f'{filepath}/{self.fewshot_name}.txt'
+
         with open(fn, 'r') as fin:
             img_names = fin.read().splitlines()
             if '#' in img_names[0]:
